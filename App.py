@@ -1,10 +1,11 @@
 import customtkinter
 from tkinter import filedialog
-from skimage import io, img_as_float,color
+from skimage import io, color
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
 
 class HistogramFrame(customtkinter.CTkFrame):
     def __init__(self, master, title):
@@ -25,7 +26,7 @@ class HistogramFrame(customtkinter.CTkFrame):
 
     def display_histogram(self, img):
         img_gray = color.rgb2gray(img)
-        colors = ['Blue','Green','Red']
+        colors = ['Blue', 'Green', 'Red']
 
         histograms = [cv2.calcHist([img], [i], None, [256], [0, 256]) for i in range(3)]
         hist_gray, bins_gray = np.histogram(img_gray.flatten(), bins=256, range=[0, 1])
@@ -43,6 +44,7 @@ class HistogramFrame(customtkinter.CTkFrame):
         canvas = FigureCanvasTkAgg(fig, master=self.histogram_canvas_1)
         canvas_widget = canvas.get_tk_widget()
         canvas_widget.pack(side="top", fill="both", expand=True)
+
 
 class PhotoFrame(customtkinter.CTkFrame):
     def __init__(self, master, title):
@@ -86,6 +88,3 @@ class App(customtkinter.CTk):
             img = io.imread(file_path)
             self.photo_frame.display_image(img)
             self.histogram_frame.display_histogram(img)
-
-
-
