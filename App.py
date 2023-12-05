@@ -12,9 +12,10 @@ class HistogramFrame(customtkinter.CTkFrame):
         super().__init__(master)
         self.title = title
         self.histogram_frame = customtkinter.CTkFrame(self)
-        self.histogram_frame.grid(row=1, column=1, padx=10, pady=(10, 10), sticky="nsew")
+        self.histogram_frame.grid(row=0, column=0, padx=10, pady=(10, 10), sticky="nsew")
 
-        self.histogram_canvas_1 = customtkinter.CTkCanvas(self.histogram_frame)
+        self.histogram_canvas_1 = customtkinter.CTkCanvas(self.histogram_frame,
+                                                         )
         self.histogram_canvas_2 = customtkinter.CTkCanvas(self.histogram_frame)
         self.histogram_canvas_3 = customtkinter.CTkCanvas(self.histogram_frame)
         self.histogram_canvas_4 = customtkinter.CTkCanvas(self.histogram_frame)
@@ -36,7 +37,7 @@ class HistogramFrame(customtkinter.CTkFrame):
 
         for i in range(3):
             axes[i].plot(histograms[i], color=colors[i])
-            axes[i].set_title(f'colors[i]')
+            axes[i].set_title(colors[i])
 
         axes[3].plot(hist_gray, color='black')
         axes[3].set_title('Grayscale')
@@ -49,10 +50,18 @@ class HistogramFrame(customtkinter.CTkFrame):
 class PhotoFrame(customtkinter.CTkFrame):
     def __init__(self, master, title):
         super().__init__(master)
+
         self.title = title
         self.photo_frame = customtkinter.CTkFrame(self)
-        self.photo_frame.grid(row=1, column=0, padx=10, pady=(10, 10), sticky="nsew")
-        self.canvas = customtkinter.CTkCanvas(self.photo_frame)
+
+        self.photo_frame.grid(row=0, column=0, padx=10, pady=(10, 10), sticky="nsew")
+        self.after_idle(self.setup_canvas)
+
+    def setup_canvas(self):
+        # Ustawienie wymiarów CTkCanvas zgodnie z wymiarami self.photo_frame
+        width = self.photo_frame.winfo_width()
+        height = self.photo_frame.winfo_height()
+        self.canvas = customtkinter.CTkCanvas(self.photo_frame, width=width, height=height)
         self.canvas.pack(side="top", fill="both", expand=True, anchor="center")
 
     def display_image(self, img):
@@ -75,10 +84,13 @@ class App(customtkinter.CTk):
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
+
         button = customtkinter.CTkButton(self, text="Dodaj zdjęcie", command=self.button_callback)
         button.grid(row=0, column=0, columnspan=2, padx=20, pady=20, sticky="nsew")
-        self.photo_frame = PhotoFrame(self, "Zdjęcie 1")
+
+        self.photo_frame = PhotoFrame(self, "Zdjęcie")
         self.photo_frame.grid(row=1, column=0, padx=(10, 10), pady=(10, 10), sticky="nsew")
+
         self.histogram_frame = HistogramFrame(self, "Histogram")
         self.histogram_frame.grid(row=1, column=1, padx=(10, 10), pady=(10, 10), sticky="nsew")
 
