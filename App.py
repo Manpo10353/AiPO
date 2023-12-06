@@ -1,5 +1,5 @@
-import customtkinter
-from tkinter import filedialog
+from tkinter import Tk, ttk, Canvas, Frame, filedialog, Label
+from PIL import Image, ImageTk
 from skimage import io, color
 import matplotlib.pyplot as plt
 import cv2
@@ -7,96 +7,84 @@ import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
-class HistogramFrame(customtkinter.CTkFrame):
-    def __init__(self, master, title):
-        super().__init__(master)
-        self.title = title
-        self.histogram_frame = customtkinter.CTkFrame(self)
-        self.histogram_frame.grid(row=0, column=0, padx=10, pady=(10, 10), sticky="nsew")
+class App:
+    def __init__(self, master):
+        self.master = master
+        master.title("Binaryzacja obrazu o wielomodalnym histogramie")
+        master.geometry(f'{master.winfo_screenwidth()}x{master.winfo_screenheight()}+0+0')
 
-        self.histogram_canvas_1 = customtkinter.CTkCanvas(self.histogram_frame,
-                                                         )
-        self.histogram_canvas_2 = customtkinter.CTkCanvas(self.histogram_frame)
-        self.histogram_canvas_3 = customtkinter.CTkCanvas(self.histogram_frame)
-        self.histogram_canvas_4 = customtkinter.CTkCanvas(self.histogram_frame)
+        self.master.columnconfigure(0, weight=1)
+        self.master.columnconfigure(1, weight=1)
+        self.master.rowconfigure(1, weight=2)
+        self.master.rowconfigure(2, weight=2)
 
-        self.histogram_canvas_1.pack(side="top", fill="both", expand=True)
-        self.histogram_canvas_2.pack(side="top", fill="both", expand=True)
-        self.histogram_canvas_3.pack(side="top", fill="both", expand=True)
-        self.histogram_canvas_4.pack(side="top", fill="both", expand=True)
+        add_image_button = ttk.Button(master, text="Dodaj obraz", command=self.insert_image)
+        add_image_button.grid(column=0, row=0)
 
-    def display_histogram(self, img):
+        close_app_button = ttk.Button(master, text="Zamknij", command=master.destroy)
+        close_app_button.grid(column=1, row=0)
+
+        self.original_image_frame = Frame(master, bg="gray")
+        self.histograms_rgb_frame = Frame(master, bg="lightgray")
+        self.binarized_image_frame = Frame(master, bg="lightgray")
+        self.grayscale_histogram_frame = Frame(master, bg="gray")
+
+        for frame in [self.original_image_frame, self.histograms_rgb_frame, self.binarized_image_frame,
+                      self.grayscale_histogram_frame]:
+            frame.pack_propagate(False)
+
+        # Place frame widgets in the grid
+        self.original_image_frame.grid(column=0, row=1, sticky="nsew")
+        self.histograms_rgb_frame.grid(column=1, row=1, sticky="nsew")
+        self.binarized_image_frame.grid(column=0, row=2, sticky="nsew")
+        self.grayscale_histogram_frame.grid(column=1, row=2, sticky="nsew")
+
+    def insert_image(self):
+        file_path = filedialog.askopenfilename(title="Select an image", filetypes=[("Image files",
+                                                                                    "*.png;*.jpg;*.jpeg;*.gif")])
+        if file_path:
+            self.clear_frame()
+            img = Image.open(file_path)
+            img_array = np.array(img)
+            canvas_for_image = Canvas(self.original_image_frame, bg='green')
+            canvas_for_image.pack(fill='both', expand=True)
+
+            canvas_for_image.image = ImageTk.PhotoImage(img.resize((self.original_image_frame.winfo_width(), self.original_image_frame.winfo_height()), Image.LANCZOS))
+            canvas_for_image.create_image(0, 0, image=canvas_for_image.image, anchor='nw')
+
+            histograms, hist_gray = self.calculate_histograms(img_array)
+
+            plt.figure()
+            for i, color_name in enumerate(['Blue', 'Green', 'Red']):
+                plt.subplot(2, 2, i + 1)
+                plt.plot(histograms[i], color=color_name.lower())
+                plt.title(f'{color_name} Histogram')
+
+            plt.subplot(2, 2, 4)
+            plt.plot(hist_gray, color='gray')
+            plt.title('Grayscale Histogram')
+
+            canvas_for_histograms = FigureCanvasTkAgg(plt.gcf(), master=self.histograms_rgb_frame)
+            canvas_for_histograms.draw()
+            canvas_for_histograms.get_tk_widget().pack(fill='both', expand=True)
+
+    def clear_frame(self):
+        for frame in [self.original_image_frame, self.histograms_rgb_frame, self.binarized_image_frame,
+                  self.grayscale_histogram_frame]:
+            for widget in frame.winfo_children():
+                widget.destroy()
+
+
+    def calculate_histograms(self, img):
         img_gray = color.rgb2gray(img)
-        colors = ['Blue', 'Green', 'Red']
 
         histograms = [cv2.calcHist([img], [i], None, [256], [0, 256]) for i in range(3)]
         hist_gray, bins_gray = np.histogram(img_gray.flatten(), bins=256, range=[0, 1])
 
-        fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-        axes = axes.flatten()
-
-        for i in range(3):
-            axes[i].plot(histograms[i], color=colors[i])
-            axes[i].set_title(colors[i])
-
-        axes[3].plot(hist_gray, color='black')
-        axes[3].set_title('Grayscale')
-
-        canvas = FigureCanvasTkAgg(fig, master=self.histogram_canvas_1)
-        canvas_widget = canvas.get_tk_widget()
-        canvas_widget.pack(side="top", fill="both", expand=True)
+        return histograms, hist_gray
 
 
-class PhotoFrame(customtkinter.CTkFrame):
-    def __init__(self, master, title):
-        super().__init__(master)
-
-        self.title = title
-        self.photo_frame = customtkinter.CTkFrame(self)
-
-        self.photo_frame.grid(row=0, column=0, padx=10, pady=(10, 10), sticky="nsew")
-        self.after_idle(self.setup_canvas)
-
-    def setup_canvas(self):
-        # Ustawienie wymiarów CTkCanvas zgodnie z wymiarami self.photo_frame
-        width = self.photo_frame.winfo_width()
-        height = self.photo_frame.winfo_height()
-        self.canvas = customtkinter.CTkCanvas(self.photo_frame, width=width, height=height)
-        self.canvas.pack(side="top", fill="both", expand=True, anchor="center")
-
-    def display_image(self, img):
-        fig, ax = plt.subplots()
-        ax.imshow(img)
-        ax.axis("off")
-        canvas = FigureCanvasTkAgg(fig, master=self.canvas)
-        canvas_widget = canvas.get_tk_widget()
-        canvas_widget.pack(side="top", fill="both", expand=True, anchor="center")
-
-
-class App(customtkinter.CTk):
-    def __init__(self):
-        super().__init__()
-        self.title("Binaryzacja obrazu wielomodalnego")
-
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        self.geometry(f"{screen_width}x{screen_height}")
-
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=1)
-
-        button = customtkinter.CTkButton(self, text="Dodaj zdjęcie", command=self.button_callback)
-        button.grid(row=0, column=0, columnspan=2, padx=20, pady=20, sticky="nsew")
-
-        self.photo_frame = PhotoFrame(self, "Zdjęcie")
-        self.photo_frame.grid(row=1, column=0, padx=(10, 10), pady=(10, 10), sticky="nsew")
-
-        self.histogram_frame = HistogramFrame(self, "Histogram")
-        self.histogram_frame.grid(row=1, column=1, padx=(10, 10), pady=(10, 10), sticky="nsew")
-
-    def button_callback(self):
-        file_path = filedialog.askopenfilename(title="Wybierz plik", filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
-        if file_path:
-            img = io.imread(file_path)
-            self.photo_frame.display_image(img)
-            self.histogram_frame.display_histogram(img)
+if __name__ == "__main__":
+    root = Tk()
+    app = App(root)
+    root.mainloop()
