@@ -3,3 +3,5 @@ Project from the Image Analysis and Processing course (AIPO) involving the imple
 ![](Screenshots/1.jpg)
 Tkinter version
 ![](Screenshots/2.jpg)
+Final version with .exe file
+![](Screenshots/3.png)

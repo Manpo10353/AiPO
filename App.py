@@ -1,6 +1,6 @@
 from tkinter import Tk, ttk, Canvas, Frame, filedialog
 from PIL import Image, ImageTk
-from skimage import color, filters
+from skimage import color, filters, io
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
@@ -20,7 +20,7 @@ class App:
         self.master.rowconfigure(1, weight=2)
         self.master.rowconfigure(2, weight=2)
 
-        add_image_button = ttk.Button(master, text="Dodaj obraz", command=self.insert_image)
+        add_image_button = ttk.Button(master, text="Dodaj obraz", command=self.image)
         add_image_button.grid(column=0, row=0)
 
         close_app_button = ttk.Button(master, text="Zamknij", command=master.destroy)
@@ -35,109 +35,123 @@ class App:
                       self.grayscale_histogram_frame]:
             frame.pack_propagate(False)
 
-        # Place frame widgets in the grid
         self.original_image_frame.grid(column=0, row=1, sticky="nsew")
         self.histograms_rgb_frame.grid(column=1, row=1, sticky="nsew")
         self.binarized_image_frame.grid(column=0, row=2, sticky="nsew")
         self.grayscale_histogram_frame.grid(column=1, row=2, sticky="nsew")
 
-    def insert_image(self):
-        file_path = filedialog.askopenfilename(title="Select an image", filetypes=[("Image files","*.png;*.jpg;*.jpeg;*.gif")])
-        if file_path:
-            self.clear_frame()
-            img = Image.open(file_path)
-            img_array = np.array(img)
-            img_gray = color.rgb2gray(img_array)
-            canvas_for_image = Canvas(self.original_image_frame, bg='green')
-            canvas_for_image.pack(fill='both', expand=True)
+    def image(self):
 
-            canvas_for_image.image = ImageTk.PhotoImage(img.resize((self.original_image_frame.winfo_width(), self.original_image_frame.winfo_height()), Image.LANCZOS))
-            canvas_for_image.create_image(0, 0, image=canvas_for_image.image, anchor='nw')
+        self.clear_frame()
+        img = self.insert_image()
 
-            histograms, hist_gray = self.calculate_histograms(img_array)
+        if img.any():
 
-            plt.figure()
-            for i, color_name in enumerate(['Red', 'Green', 'Blue']):
-                plt.subplot(2, 2, i + 1)
-                plt.plot(histograms[i], color=color_name.lower())
-                plt.title(f'{color_name} Histogram')
+            self.show_image(img, self.original_image_frame)
+            img_gray = color.rgb2gray(img)
+            histograms, hist_gray = self.calculate_histograms(img)
+            histograms.append(hist_gray)
+            self.plot_histograms_rgb_gray(histograms, self.histograms_rgb_frame)
 
-            plt.subplot(2, 2, 4)
-            plt.plot(hist_gray, color='gray')
-            plt.title('Grayscale Histogram')
-
-            canvas_for_histograms = FigureCanvasTkAgg(plt.gcf(), master=self.histograms_rgb_frame)
-            canvas_for_histograms.draw()
-            canvas_for_histograms.get_tk_widget().pack(fill='both', expand=True)
-
-            derivative = np.diff(hist_gray)
-
-            # Znajdź punkty zwrotne w pochodnej (zmiana kierunku)
-            inflection_points = np.where(np.diff(np.sign(derivative)))[0]
-
-            peaks, _ = find_peaks(hist_gray, distance=40)
-
-            print(inflection_points, peaks)
+            peaks, _ = find_peaks(hist_gray, distance=45)
             thresholds = self.calculate_thresholds(img_gray, peaks)
 
             binarized = self.binarize(img_gray, thresholds)
             binarized_hist, bins_gray = np.histogram(binarized, bins=256)
-            binarized_hist = [binarized_hist[i] / (binarized.shape[0]*binarized.shape[1]) for i in range(256)]
+            binarized_hist = [binarized_hist[i] / (binarized.shape[0] * binarized.shape[1]) for i in range(256)]
 
-            # Utwórz wykres
-            fig, ax1 = plt.subplots()
+            self.plot_histogram_thresholds(hist_gray, binarized_hist, thresholds, self.grayscale_histogram_frame)
 
-            # Rysuj binarized_hist na pierwszej osi Y (lewa oś Y)
-            ax1.plot(binarized_hist, color='gray', label='Binarized hist')
-            ax1.set_ylabel('Binarized Histogram', color='gray')
-            ax1.tick_params('y', colors='gray')
-            ax1.legend(loc='upper left')
+            self.show_image(binarized, self.binarized_image_frame)
 
-            # Dodaj linie pionowe dla progów
-            for threshold in thresholds:
-                ax1.axvline(x=threshold, color='r', linestyle='--')
+            self.save_image(binarized)
 
-            # Utwórz drugą oś Y (prawa oś Y)
-            ax2 = ax1.twinx()
-            ax2.plot(hist_gray, color='r', label='hist_gray')
-            ax2.set_ylabel('Grayscale Histogram', color='r')
-            ax2.tick_params('y', colors='r')
-            ax2.legend(loc='upper right')
+    @staticmethod
+    def plot_histogram_thresholds(hist_gray, hist_bin, thresholds, frame):
+        fig, ax1 = plt.subplots()
 
-            plt.title('Grayscale Histogram with thresholds')
+        ax1.plot(hist_bin, color='gray', label='Binarized hist')
+        ax1.set_ylabel('Binarized Histogram', color='gray')
+        ax1.tick_params('y', colors='gray')
+        ax1.legend(loc='upper left')
 
-            # Utwórz widget Canvas Tkinter
-            canvas_for_gray_histogram = FigureCanvasTkAgg(fig, master=self.grayscale_histogram_frame)
-            canvas_for_gray_histogram.draw()
-            canvas_for_gray_histogram.get_tk_widget().pack(fill='both', expand=True)
+        for threshold in thresholds:
+            ax1.axvline(x=threshold, color='r', linestyle='--')
 
-            canvas_for_image = Canvas(self.binarized_image_frame, bg='green')
-            canvas_for_image.pack(fill='both', expand=True)
-            binarized_image_pil = Image.fromarray(binarized)
-            binarized_image_tk = ImageTk.PhotoImage(binarized_image_pil.resize((self.original_image_frame.winfo_width(), self.original_image_frame.winfo_height()), Image.LANCZOS))
-            canvas_for_image.create_image(0, 0, image=binarized_image_tk, anchor='nw')
+        ax2 = ax1.twinx()
+        ax2.plot(hist_gray, color='r', label='hist_gray')
+        ax2.set_ylabel('Grayscale Histogram', color='r')
+        ax2.tick_params('y', colors='r')
+        ax2.legend(loc='upper right')
 
-            canvas_for_image.image = binarized_image_tk
+        plt.title('Grayscale Histogram with thresholds')
+
+        canvas_for_gray_histogram = FigureCanvasTkAgg(fig, master=frame)
+        canvas_for_gray_histogram.draw()
+        canvas_for_gray_histogram.get_tk_widget().pack(fill='both', expand=True)
+
+    @staticmethod
+    def plot_histograms_rgb_gray(histograms, frame):
+        plt.figure()
+        for i, color_name in enumerate(['Red', 'Green', 'Blue']):
+            plt.subplot(2, 2, i + 1)
+            plt.plot(histograms[i], color=color_name.lower())
+            plt.title(f'{color_name} Histogram')
+
+        plt.subplot(2, 2, 4)
+        plt.plot(histograms[3], color='gray')
+        plt.title('Grayscale Histogram')
+
+        canvas_for_histograms = FigureCanvasTkAgg(plt.gcf(), master=frame)
+        canvas_for_histograms.draw()
+        canvas_for_histograms.get_tk_widget().pack(fill='both', expand=True)
+
+    @staticmethod
+    def show_image(img, frame):
+        img_resized = Image.fromarray(img.astype(np.uint8))
+        img_resized = img_resized.resize(
+            (frame.winfo_width(),
+             frame.winfo_height()),
+            Image.LANCZOS)
+
+        canvas_for_image = Canvas(frame)
+        canvas_for_image.pack(fill='both', expand=True)
+
+        canvas_for_image.image = ImageTk.PhotoImage(img_resized.resize((img_resized.width, img_resized.height)))
+        canvas_for_image.create_image(0, 0, image=canvas_for_image.image, anchor='nw')
+
+    @staticmethod
+    def insert_image():
+        file_path = filedialog.askopenfilename(title="Select an image", filetypes=[("Image files",
+                                                                                    "*.png;*.jpg;*.jpeg;*.gif")])
+        img = io.imread(file_path)
+        if img.shape[2] == 4:
+            img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
 
 
-    def save_image(self, binarized_img):
-        file_path = filedialog.asksaveasfilename(defaultextension=".jpg", filetypes=[("JPEG files", "*.jpg")])
-        if file_path:
-            binarized_img.save(file_path)
+        return img
+
+    @staticmethod
+    def save_image(img):
+        file_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
+        if file_path and img is not None:
+            pil_img = Image.fromarray(img)
+            pil_img.save(file_path)
 
     def clear_frame(self):
-        for frame in [self.original_image_frame, self.histograms_rgb_frame, self.binarized_image_frame,self.grayscale_histogram_frame]:
+        for frame in [self.original_image_frame, self.histograms_rgb_frame, self.binarized_image_frame,
+                      self.grayscale_histogram_frame]:
             for widget in frame.winfo_children():
                 widget.destroy()
 
     @staticmethod
     def calculate_thresholds(img_gray, peaks):
         optimal_thresholds = filters.threshold_multiotsu(img_gray, classes=len(peaks))
-        return (optimal_thresholds*255).astype(np.uint8)
+        return (optimal_thresholds * 255).astype(np.uint8)
 
     @staticmethod
     def binarize(img, thresholds):
-        img = (img*255).astype(np.uint8)
+        img = (img * 255).astype(np.uint8)
         gray = (np.linspace(0, 255, len(thresholds) + 1).astype(np.uint8))
         binarized = np.digitize(img, bins=thresholds).astype(np.uint8)
         binarized = np.choose(binarized, gray)
