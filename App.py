@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from scipy.signal import find_peaks
+from skimage.morphology import disk
 
 
 class App:
@@ -45,18 +46,32 @@ class App:
         self.clear_frame()
         img = self.insert_image()
 
+
+
         if img.any():
 
             self.show_image(img, self.original_image_frame)
             img_gray = color.rgb2gray(img)
             histograms, hist_gray = self.calculate_histograms(img)
             histograms.append(hist_gray)
+
             self.plot_histograms_rgb_gray(histograms, self.histograms_rgb_frame)
 
-            peaks, _ = find_peaks(hist_gray, distance=45)
-            thresholds = self.calculate_thresholds(img_gray, peaks)
+            hist_array = np.array(hist_gray)
 
+            peaks, _ = find_peaks(hist_array, distance=20, width=2)
+            if len(peaks) == 0:
+                peaks, _ = find_peaks(hist_array, distance=20, width=1)
+
+            thresholds = self.calculate_thresholds(img_gray, min(len(peaks), 5))
             binarized = self.binarize(img_gray, thresholds)
+
+            kernel = disk(2)
+            opened_image = cv2.morphologyEx(binarized, cv2.MORPH_OPEN, kernel)
+            closed_opened_image = cv2.morphologyEx(opened_image, cv2.MORPH_CLOSE, kernel)
+
+            binarized = closed_opened_image
+
             binarized_hist, bins_gray = np.histogram(binarized, bins=256)
             binarized_hist = [binarized_hist[i] / (binarized.shape[0] * binarized.shape[1]) for i in range(256)]
 
@@ -128,7 +143,6 @@ class App:
         if img.shape[2] == 4:
             img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
 
-
         return img
 
     @staticmethod
@@ -146,7 +160,7 @@ class App:
 
     @staticmethod
     def calculate_thresholds(img_gray, peaks):
-        optimal_thresholds = filters.threshold_multiotsu(img_gray, classes=len(peaks))
+        optimal_thresholds = filters.threshold_multiotsu(img_gray, classes=peaks)
         return (optimal_thresholds * 255).astype(np.uint8)
 
     @staticmethod
